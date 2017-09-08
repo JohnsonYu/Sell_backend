@@ -1,0 +1,146 @@
+worker_processes  2;        #根据核数确定nginx worker 数量
+error_log logs/error.log;   #指定错误日志文件路径
+events {
+    worker_connections 1024;
+}
+http {
+    server_tokens off;
+    lua_package_path '${prefix}/?.lua;;';
+    lua_code_cache on;
+    lua_shared_dict ngx_cache 10m;
+    resolver 223.5.5.5 223.6.6.6 1.2.4.8 114.114.114.114 valid=3600s;
+
+    init_worker_by_lua_file lua/api/timer/timer.lua;
+
+    server {
+        #监听端口，若你的6699端口已经被占用，则需要修改
+        listen 8010;
+        charset utf-8;
+  server_name live.scdkkj.com;
+        root /home/ubuntu/www/jrylzbxt/pc;
+  index index.php index.html index.htm; 
+        #default_type application/json;
+  error_page 404 = /404.html;
+
+        location ~ .+\.(html|xml)$ {
+            expires 30d;
+        }
+
+        location ~ ^/(img|javascript|js|css|flash|media|static|img)/ {
+            include cors;
+            root static;
+            expires 30d;
+        }
+  
+  location ~* /assets/([-_a-zA-Z0-9/]+) {
+      include /opt/openresty/nginx/conf/mime.types;
+      root /home/ubuntu/www/jrylzbxt/pc;
+      expires 30d;
+  }
+
+  location ~* /m/([-_a-zA-Z0-9/]+) {
+            include /opt/openresty/nginx/conf/mime.types;
+            root /home/ubuntu/www/jrylzbxt/pc;
+            expires 30d;
+        }
+
+  
+  location /dkmanage/css {
+      include /opt/openresty/nginx/conf/mime.types;
+  }
+  
+  location /dkmanage {
+      root /home/ubuntu/www/jrylzbxt/pc;
+  }
+
+        location  / { 
+      #try_files $uri $uri/ /index.php$is_args$args;
+      try_files $uri $uri/ $uri.php;
+#     root /home/ubuntu/www/jrylzbxt/pc;
+        }
+
+        location ~* /examples/([-_a-zA-Z0-9/]+) {
+            client_max_body_size 2m;
+            content_by_lua_file examples/$1.lua;
+        }
+
+        location = /test {
+            content_by_lua_file lua/test.lua;
+        }
+
+        location = /media {
+            content_by_lua_file lua/media.lua;
+        }
+
+        location = /youku {
+            default_type application/json;
+            content_by_lua_file lua/youku.lua;
+        }
+        
+        location ~* ^/pay/([-_a-zA-Z0-9/]+)/([-_a-zA-Z0-9/]+)$ {
+            include cors;
+            content_by_lua_file lua/pay/$1/$2.lua;
+        }
+
+        location /upfile {
+            include cors;
+            default_type application/json;
+            client_max_body_size 300m;
+            content_by_lua_file lua/upload.lua;
+        }
+
+        location = /api/sms {
+            internal;
+            proxy_pass  http://localhost:5000/sms;
+        }
+
+        location ~* ^/api/([-_a-zA-Z0-9/]+)/([-_a-zA-Z0-9/]+)$ {
+            include cors;
+            default_type application/json;
+            access_by_lua_file lua/api/$1/access.lua;
+            content_by_lua_file lua/api/$1/$2.lua;
+        }
+
+        location ~* ^/api/([-_a-zA-Z0-9/]+) {
+            include cors;
+            default_type application/json;
+            access_by_lua_file lua/api/$1/access.lua;
+            content_by_lua_file lua/api/$1/$1.lua;
+        }
+
+
+        # 测试路由
+        location ~* ^/t/([-_a-zA-Z0-9/]+) {
+            content_by_lua_file lua/test/$1.lua;
+        }
+
+        location /chat {
+            lua_socket_log_errors off;
+            lua_check_client_abort on;
+            content_by_lua_file lua/socket.lua;
+        }
+  
+  location ~ \.php$ {
+      #include fastcgi_params; 
+      include /opt/openresty/nginx/conf/fastcgi_params;
+            try_files  $uri =404;
+            access_log logs/php_access.log;
+            root /home/ubuntu/www/jrylzbxt/pc; 
+            #fastcgi_split_path_info ^(.+?\.php)(/.*)$;
+            #if (!-f $document_root$fastcgi_script_name) {
+            #  return 404;
+            #
+
+            # Mitigate https://httpoxy.org/ vulnerabilities
+            #fastcgi_param HTTP_PROXY "";
+      fastcgi_param   SCRIPT_FILENAME         $document_root$fastcgi_script_name;
+
+            #fastcgi_pass 127.0.0.1:9000;
+            fastcgi_pass unix:/var/run/php5-fpm.sock;
+            fastcgi_index index.php;
+        }
+
+    }
+
+}
+
